@@ -11,7 +11,7 @@ let options = {
     "Cache-Control": "no-cache",
     "X-Sap-Auth": 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlN2U5NDhlOC0xMzA3 LTRhNDktOTkzZS1jZDQwMGIyNDBiNzMiLCJpYXQiOjE1MTc0NDMyMDB9.c CnoZDiDA1wZDw2jrbRgpwWvtA5nHHaDaUKLl1fAXAY'
   },
-  ALPNProtocols: ["http/1.1"],
+  ALPNProtocols: ["http/1.1"], // Tried different permutations still did not work.
 };
 
 var req = https.request(options, function(res) {
@@ -32,66 +32,82 @@ req.write('data\n');
 req.end();
 */
 
+// -----------------------------------------------------------------------------------------------
 // Parsing the object being returned from the API - currently importing manually as a JSON object. 
 /* Array of objects that holds the following information
 Title => _embedded.media-items[0].title 
 youtube_url = videoUrl, _embedded.media-items[0].youtube_url 
 Reach per video =>  _embedded.media-items[0].reach 
 */
+// -----------------------------------------------------------------------------------------------
 let subSplashResults = [];
 results = results._embedded["media-items"];
 results.forEach(element => {
+  element.duration = '';
+  element.views = '';
   subSplashResults.push(element);
 });
 
 // Loop to retrieve relevant YT fields for each object in the array.
-for(let i = 0; i < subSplashResults.length; i++ ) {
-  if(subSplashResults[i].youtube_url.slice(-13, -11) !== 'v=') {
-    continue;
+function pingYT() {
+  // const combinedArray = subSplashResults.map( () => {        /// idea to try to add the views and duration to objects
+  for(let i = 0; i < subSplashResults.length; i++ ) {
+    if(subSplashResults[i].youtube_url.slice(-13, -11) !== 'v=') {
+      continue;
+    }
+    var req = https.get(`https://www.googleapis.com/youtube/v3/videos?part=snippet%2C+contentDetails%2C+statistics&id=${subSplashResults[i].youtube_url.slice(-11)}&key=AIzaSyBWUFr0py0ypP4G_XYeNsez-JqPCT1jwoI`, function (res) {
+      let chunks = [];
+
+      res.on("data", function (chunk) {
+        chunks.push(chunk);
+      });
+
+      res.on("end", function () {
+        let body = Buffer.concat(chunks);
+        let bodyString = JSON.parse(body);
+        subSplashResults[i].duration = bodyString.items[0].contentDetails.duration;
+        subSplashResults[i].views = bodyString.items[0].statistics.viewCount;
+      });
+    });
+
+    req.end();
   }
-  var req = https.get(`https://www.googleapis.com/youtube/v3/videos?part=snippet%2C+contentDetails%2C+statistics&id=${subSplashResults[i].youtube_url.slice(-11)}&key=AIzaSyBWUFr0py0ypP4G_XYeNsez-JqPCT1jwoI`, function (res) {
-    var chunks = [];
-
-    res.on("data", function (chunk) {
-      chunks.push(chunk);
-    });
-
-    res.on("end", function () {
-      var body = Buffer.concat(chunks);
-      let bodyString = JSON.parse(body);
-      subSplashResults[i].duration = bodyString.items[0].contentDetails.duration;
-      subSplashResults[i].views = bodyString.items[0].statistics.viewCount;
-      console.log(subSplashResults[2]);
-    });
-  });
-
-req.end();
+  return subSplashResults;
 }
 
-
-let tableArray = []; // Table to be printed 
-// 45 min = 2700000ms
-function filterResults() {
-  subSplashResults.forEach(item => {
-    // console.log('This is item', item);
-    if(item.views > 100 && item.duration.includes('H')) {
-      for(let i = 0; i < tableArray.length; i++) {
-        tableArray.splice(i, 0, item);
-        // if(item.reach > tableArray[i].reach) {
-        //   break;
-        // } 
-      }
-      tableArray.push(item);
-    }
-  });
-};
-console.log('This is where the table array starts', tableArray);
-filterResults();
-
+// -----------------------------------------------------------------------------------------------
 /*
-Steps to complete:
-2. Hit the Youtube API with the youtube_url field pointed at the videos API to retrieve
-Duration => items.contentDetails.duration 
-Views => items.statistics.viewCount 
-3. Filter results by videos that are of Duration > 45 min this field is returned as 
+3. Filter results by videos that are of Duration > 45 min && parse the string value for H or trim PT and check next 2 chars of string.  
+4. Print output to the Table.
 */
+// let tableArray = Table to be printed 
+// 45 min = 2700000ms
+
+function compare(a, b) {
+  const reachA = a.reach;
+  const reachB = b.reach;
+  
+  let comparison = 0;
+  if (reachA < reachB) {
+    comparison = 1;
+  } else if (reachA > reachB) {
+    comparison = -1;
+  }
+  return comparison;
+}
+
+const tableArray = subSplashResults.sort(compare);
+
+console.log(tableArray);
+// const tableArray = subSplashResults.filter(item => item.reach > 100);
+
+// -----------------------------------------------------------------------------------------------
+// Appending elements to the HTML document
+// -----------------------------------------------------------------------------------------------
+// let tablerow = document.getElementById(`row${1}`).firstChild();
+// // let node = document.createTextNode('TD');
+// tablerow.appendChild(tableArray[0].title);
+
+// -----------------------------------------------------------------------------------------------
+// Function Calls 
+pingYT();
