@@ -20,3 +20,6 @@ subSplashResults[i].views = bodyString.items[0].statistics.viewCount;
 This is the main blocker and I have scaffolded out my approach for the rest of the problem in the code itself. 
 
 Please let me know if you have any questions. 
+
+---------
+New things that I have noticed - youtube url provided sometimes have extra information past the video ID - need to clean up string parsing method for this. 
